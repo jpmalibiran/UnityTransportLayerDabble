@@ -13,7 +13,7 @@ public class NetworkServer : MonoBehaviour{
     public ushort serverPort; // server port
     private NativeList<NetworkConnection> m_Connections; //List of connections. NativeList is an unmanaged memory list data structure (no garbage collection)
 
-    private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict;
+    private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict; //the int key represents NetworkConnection.internalId
     private ushort clientIDCounter = 1;
 
 
@@ -98,14 +98,7 @@ public class NetworkServer : MonoBehaviour{
         m_Connections.Add(c);
         newClient = new NetworkObjects.NetworkPlayer();
 
-        //Tick up counter so that the next connected client gets a new unique ID. 
-        //Note: Obviously there will be issues if there are over 65530 concurrent players connecting. TODO check if ID is taken before assigning it.
-        clientIDCounter++;
-
-        if (clientIDCounter >= 65530) { //Reset counter near ushort max
-            clientIDCounter = 1;
-        }
-        newClient.clientID = clientIDCounter; //Assign new ID
+        newClient.clientID = GetNewClientID(); //Assign new ID
 
         m_clientIDDict.Add(c.InternalId, newClient);
 
@@ -203,6 +196,10 @@ public class NetworkServer : MonoBehaviour{
                 Debug.Log("[Notice] Ping received!");
                 PongClientResponse(i); // Send back Pong message
                 break;
+            case Commands.CLIENT_HANDSHAKE:
+                Debug.Log("[Notice] Handshake from client received!");
+                SendServerHandshake(i, m_clientIDDict[m_Connections[i].InternalId].clientID); //Send back handshake
+                break;
             default:
                 Debug.LogError("[Error] SERVER ERROR: Unrecognized message received!");
                 break;
@@ -222,10 +219,38 @@ public class NetworkServer : MonoBehaviour{
         m_Connections[i] = default(NetworkConnection);
     }
 
+    private ushort GetNewClientID() {
+        //Tick up counter so that the next connected client gets a new unique ID. 
+        //Note: Obviously there will be issues if there are over 65530 concurrent players connecting. TODO check if ID is taken before assigning it.
+        clientIDCounter++;
+
+        if (clientIDCounter >= 65530) { //Reset counter near ushort max
+            clientIDCounter = 1;
+        }
+
+        return clientIDCounter;
+    }
+
     private void PongClientResponse(int getConnectionIndex) {
         NetworkHeader pongMsg = new NetworkHeader(); 
         pongMsg.cmd = Commands.PONG;
         SendToClient(JsonUtility.ToJson(pongMsg), m_Connections[getConnectionIndex]);    
         Debug.Log("[Notice] Pong sent!");
     }
+
+    private void SendServerHandshake(int targetClientIndex, ushort setClientID) {
+        ServerHandshakeMsg msg;
+
+        //Create handshake object and assign client its ID
+        msg = new ServerHandshakeMsg(setClientID);
+
+        //Setting up list of player data (if any) to send to newly connected player
+        foreach(KeyValuePair<int, NetworkObjects.NetworkPlayer> client in m_clientIDDict){
+            msg.players.Add(client.Value);
+        }
+
+        //Send handshake to client
+        SendToClient(JsonUtility.ToJson(msg), m_Connections[targetClientIndex]);
+    }
+
 }

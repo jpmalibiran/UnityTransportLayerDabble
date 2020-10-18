@@ -9,9 +9,12 @@ namespace NetworkMessages{
         PLAYER_UPDATE,
         SERVER_UPDATE,
         HANDSHAKE,
+        CLIENT_HANDSHAKE,
+        SERVER_HANDSHAKE,
         PLAYER_INPUT,
         PING,
         PONG,
+
     }
 
     [System.Serializable]
@@ -20,10 +23,27 @@ namespace NetworkMessages{
     }
 
     [System.Serializable]
+    public class ServerHandshakeMsg:NetworkHeader{
+        public List<NetworkObjects.NetworkPlayer> players;
+        public ushort clientID;
+
+        public ServerHandshakeMsg(ushort setClientID) {
+            clientID = setClientID;
+            cmd = Commands.SERVER_HANDSHAKE;
+            players = new List<NetworkObjects.NetworkPlayer>();
+        }
+    }
+
+    [System.Serializable]
     public class HandshakeMsg:NetworkHeader{
         public NetworkObjects.NetworkPlayer player;
+
         public HandshakeMsg(){      // Constructor
             cmd = Commands.HANDSHAKE;
+            player = new NetworkObjects.NetworkPlayer();
+        }
+        public HandshakeMsg(Commands getCommand){      // Constructor
+            cmd = getCommand;
             player = new NetworkObjects.NetworkPlayer();
         }
     }
@@ -65,7 +85,7 @@ namespace NetworkObjects{
     public class NetworkPlayer : NetworkObject{
         public Color cubeColor;
         public Vector3 cubePosition;
-        public Vector3 cubeOrientatiom;
+        public Vector3 cubeOrientation;
         public bool bUnassignedData;
 
         public NetworkPlayer(){
