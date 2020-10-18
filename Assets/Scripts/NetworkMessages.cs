@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Networking.Transport;
 
 namespace NetworkMessages{
 
@@ -8,7 +9,9 @@ namespace NetworkMessages{
         PLAYER_UPDATE,
         SERVER_UPDATE,
         HANDSHAKE,
-        PLAYER_INPUT
+        PLAYER_INPUT,
+        PING,
+        PONG,
     }
 
     [System.Serializable]
@@ -54,16 +57,20 @@ namespace NetworkMessages{
 namespace NetworkObjects{
     [System.Serializable]
     public class NetworkObject{
-        public string id;
+        //public string id;
+        public ushort clientID;
     }
 
     [System.Serializable]
     public class NetworkPlayer : NetworkObject{
         public Color cubeColor;
-        public Vector3 cubPos;
+        public Vector3 cubePosition;
+        public Vector3 cubeOrientatiom;
+        public bool bUnassignedData;
 
         public NetworkPlayer(){
             cubeColor = new Color();
+            bUnassignedData = true;
         }
     }
 }

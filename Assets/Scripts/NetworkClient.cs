@@ -5,6 +5,8 @@ using NetworkMessages;
 using NetworkObjects;
 using System;
 using System.Text;
+using System.Collections;
+using System.Collections.Generic;
 
 //Note: The connections server-to-client and client-to-server are NOT the same connection.
 //The internalId represents the connections to an application. A client application may only have one connection- the server and that may be represented by the id 0.
@@ -15,9 +17,14 @@ public class NetworkClient : MonoBehaviour{
     public NetworkConnection m_Connection;
     public string serverIP;
     public ushort serverPort;
+    public bool bVerboseDebug = false;
 
-    
+    private bool bPingServer = true;
+    private uint m_pingInterval = 20;
+
     void Start (){
+        Debug.Log("[Notice] Connecting to server...");
+
         m_Driver = NetworkDriver.Create();
         m_Connection = default(NetworkConnection);
         var endpoint = NetworkEndPoint.Parse(serverIP,serverPort); // Establish server endpoint
@@ -27,7 +34,36 @@ public class NetworkClient : MonoBehaviour{
 
         m_Connection = m_Driver.Connect(endpoint);
     }
+
+    public void OnDestroy(){
+        Debug.Log("[Notice] Cleaning up network driver...");
+        m_Driver.Dispose();
+    } 
     
+    void Update(){
+        m_Driver.ScheduleUpdate().Complete();
+
+        if (!m_Connection.IsCreated){
+            return;
+        }
+
+        DataStreamReader stream;
+        NetworkEvent.Type cmd;
+        cmd = m_Connection.PopEvent(m_Driver, out stream);
+        while (cmd != NetworkEvent.Type.Empty){
+            if (cmd == NetworkEvent.Type.Connect){
+                OnConnect();
+            }
+            else if (cmd == NetworkEvent.Type.Data){
+                OnData(stream);
+            }
+            else if (cmd == NetworkEvent.Type.Disconnect){
+                OnDisconnect();
+            }
+            cmd = m_Connection.PopEvent(m_Driver, out stream);
+        }
+    }
+
     void SendToServer(string message){
         var writer = m_Driver.BeginSend(m_Connection);
         NativeArray<byte> bytes = new NativeArray<byte>(Encoding.ASCII.GetBytes(message),Allocator.Temp);
@@ -36,7 +72,10 @@ public class NetworkClient : MonoBehaviour{
     }
 
     void OnConnect(){
-        Debug.Log("We are now connected to the server");
+        Debug.Log("[Notice] Client connected to server.");
+
+        Debug.Log("[Notice] Routinely pinging server...");
+        StartCoroutine(PingServerRoutine(m_pingInterval));
 
         //// Example to send a handshake message:
         // HandshakeMsg m = new HandshakeMsg();
@@ -53,18 +92,21 @@ public class NetworkClient : MonoBehaviour{
         switch(header.cmd){
             case Commands.HANDSHAKE:
                 HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
-                Debug.Log("Handshake message received!");
+                Debug.Log("[Notice] Handshake message received!");
                 break;
-            case Commands.PLAYER_UPDATE:
+            case Commands.PLAYER_UPDATE: //shouldnt happen
                 PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-                Debug.Log("Player update message received!");
+                Debug.LogError("[Error] Player update message received! Client shouldn't receive messages from clients.");
                 break;
             case Commands.SERVER_UPDATE:
                 ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
-                Debug.Log("Server update message received!");
+                Debug.Log("[Notice] Server update message received!");
+                break;
+            case Commands.PONG:
+                Debug.Log("[Notice] Pong message received!");
                 break;
             default:
-                Debug.Log("Unrecognized message received!");
+                Debug.LogError("[Error] Unrecognized message received!");
                 break;
         }
     }
@@ -75,39 +117,21 @@ public class NetworkClient : MonoBehaviour{
     }
 
     void OnDisconnect(){
-        Debug.Log("Client got disconnected from server");
+        Debug.Log("[Notice] Client got disconnected from server.");
         m_Connection = default(NetworkConnection);
     }
 
-    public void OnDestroy(){
-        m_Driver.Dispose();
-    } 
-    
-    void Update(){
-        m_Driver.ScheduleUpdate().Complete();
+    IEnumerator PingServerRoutine(float timeInterval){
+        NetworkHeader pingMsg = new NetworkHeader(); 
+        pingMsg.cmd = Commands.PING;
 
-        if (!m_Connection.IsCreated){
-            return;
-        }
-
-        DataStreamReader stream;
-        NetworkEvent.Type cmd;
-        cmd = m_Connection.PopEvent(m_Driver, out stream);
-        while (cmd != NetworkEvent.Type.Empty){
-            if (cmd == NetworkEvent.Type.Connect)
-            {
-                OnConnect();
+        while (bPingServer) {
+            if (bVerboseDebug) {
+                Debug.Log("[Routine] Pinging server.");
             }
-            else if (cmd == NetworkEvent.Type.Data)
-            {
-                OnData(stream);
-            }
-            else if (cmd == NetworkEvent.Type.Disconnect)
-            {
-                OnDisconnect();
-            }
-
-            cmd = m_Connection.PopEvent(m_Driver, out stream);
+            SendToServer(JsonUtility.ToJson(pingMsg));
+            yield return new WaitForSeconds(timeInterval);
         }
     }
+
 }
