@@ -161,6 +161,11 @@ public class NetworkClient : MonoBehaviour{
                 m_thisClientID = shMsg.clientID; //keep a reference to local player ID
                 SpawnRemotePlayers(shMsg.players); //Spawn remote players
                 break;
+            case Commands.NEW_PLAYER:
+                PlayerUpdateMsg puMSg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+                Debug.Log("[Notice] A new player has connected. (" + puMSg.player.clientID + ")");
+                SpawnRemotePlayer(puMSg.player);
+                break;
             default:
                 Debug.LogError("[Error] Unrecognized message received!");
                 break;
@@ -180,6 +185,8 @@ public class NetworkClient : MonoBehaviour{
     private void SpawnRemotePlayers(List<NetworkObjects.NetworkPlayer> remotePlayers) {
         GameObject newObj;
 
+        Debug.Log("[Notice] Spawning remote players:");
+
         if (!clientCubePrefab) {
             Debug.LogError("[Error] Player character prefab missing! Aborting operation...");
         }
@@ -189,15 +196,16 @@ public class NetworkClient : MonoBehaviour{
             newObj = Instantiate(clientCubePrefab, player.cubePosition, Quaternion.identity);
             newObj.transform.eulerAngles = player.cubeOrientation;
             m_clientIDDict.Add(player.clientID, newObj.transform); //Add to player dictionary
+            Debug.Log(" - Client ID: " + player.clientID + " Spawned.");
         }
     }
-
 
     private void SpawnRemotePlayer(NetworkObjects.NetworkPlayer remotePlayer) {
         GameObject newObj;
         newObj = Instantiate(clientCubePrefab, remotePlayer.cubePosition, Quaternion.identity);
         newObj.transform.eulerAngles = remotePlayer.cubeOrientation;
         m_clientIDDict.Add(remotePlayer.clientID, newObj.transform); //Add to player dictionary
+        Debug.Log("[Notice] Spawned remote player: (" + remotePlayer.clientID + ")");
     }
 
     private IEnumerator PingServerRoutine(float timeInterval){

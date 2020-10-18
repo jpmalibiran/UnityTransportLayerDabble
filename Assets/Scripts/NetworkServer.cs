@@ -193,12 +193,13 @@ public class NetworkServer : MonoBehaviour{
                 Debug.LogError("[Error] Server update message received! The server shouldn't receive Commands.SERVER_UPDATE.");
                 break;
             case Commands.PING:
-                Debug.Log("[Notice] Ping received!");
+                Debug.Log("[Notice] Ping received from " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
                 PongClientResponse(i); // Send back Pong message
                 break;
             case Commands.CLIENT_HANDSHAKE:
-                Debug.Log("[Notice] Handshake from client received!");
+                Debug.Log("[Notice] Handshake from client received! " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
                 SendServerHandshake(i, m_clientIDDict[m_Connections[i].InternalId].clientID); //Send back handshake
+                UpdateClientsWithNewPlayer(m_clientIDDict[m_Connections[i].InternalId].clientID); //Send all connected clients the new player data
                 break;
             default:
                 Debug.LogError("[Error] SERVER ERROR: Unrecognized message received!");
@@ -208,7 +209,7 @@ public class NetworkServer : MonoBehaviour{
 
     //Turns the connection at the index into a default connections. Which will be cleaned up in Update()
     private void OnDisconnect(int i){
-        Debug.Log("[Notice] Client disconnected from server");
+        Debug.Log("[Notice] Client disconnected from server. " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
 
         //Remove entry in Dictionary m_clientIDDict
         if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
@@ -235,11 +236,13 @@ public class NetworkServer : MonoBehaviour{
         NetworkHeader pongMsg = new NetworkHeader(); 
         pongMsg.cmd = Commands.PONG;
         SendToClient(JsonUtility.ToJson(pongMsg), m_Connections[getConnectionIndex]);    
-        Debug.Log("[Notice] Pong sent!");
+        Debug.Log("[Notice] Pong sent to Client! " + m_Connections[getConnectionIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[getConnectionIndex].InternalId].clientID + "(clientID)");
     }
 
     private void SendServerHandshake(int targetClientIndex, ushort setClientID) {
         ServerHandshakeMsg msg;
+
+        Debug.Log("[Notice] Sending player list and assigned ID to newly connected player... ");
 
         //Create handshake object and assign client its ID
         msg = new ServerHandshakeMsg(setClientID);
@@ -251,6 +254,34 @@ public class NetworkServer : MonoBehaviour{
 
         //Send handshake to client
         SendToClient(JsonUtility.ToJson(msg), m_Connections[targetClientIndex]);
+        Debug.Log("[Notice] Handshake sent to Client! " + m_Connections[targetClientIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[targetClientIndex].InternalId].clientID + "(clientID)");
+
+        ShowClientList();
+    }
+
+    private void UpdateClientsWithNewPlayer(ushort getClientID) {
+        PlayerUpdateMsg newPlayerMsg;
+
+        Debug.Log("[Notice] Sending new player data to all connected clients...");
+
+        newPlayerMsg = new PlayerUpdateMsg(Commands.NEW_PLAYER);
+
+        newPlayerMsg.player.clientID = getClientID;
+        newPlayerMsg.player.cubePosition = m_clientIDDict[getClientID].cubePosition;
+        newPlayerMsg.player.cubeOrientation = m_clientIDDict[getClientID].cubeOrientation;
+        newPlayerMsg.player.cubeColor = Color.white;
+        newPlayerMsg.player.bUnassignedData = false;
+
+        foreach (NetworkConnection client in m_Connections) {
+            SendToClient(JsonUtility.ToJson(newPlayerMsg), client);
+        }
+    }
+
+    private void ShowClientList() {
+        Debug.Log("[Notice] Connected Clients:");
+        foreach (NetworkConnection client in m_Connections) {
+            Debug.Log(" - " + client.InternalId + "(InternalId) " + m_clientIDDict[client.InternalId].clientID + "(clientID)");
+        }
     }
 
 }

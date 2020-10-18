@@ -6,6 +6,8 @@ using Unity.Networking.Transport;
 namespace NetworkMessages{
 
     public enum Commands{
+        DEFAULT,
+        NEW_PLAYER,
         PLAYER_UPDATE,
         SERVER_UPDATE,
         HANDSHAKE,
@@ -53,6 +55,10 @@ namespace NetworkMessages{
         public NetworkObjects.NetworkPlayer player;
         public PlayerUpdateMsg(){      // Constructor
             cmd = Commands.PLAYER_UPDATE;
+            player = new NetworkObjects.NetworkPlayer();
+        }
+        public PlayerUpdateMsg(Commands getCommand){      // Constructor
+            cmd = getCommand;
             player = new NetworkObjects.NetworkPlayer();
         }
     };
