@@ -20,7 +20,7 @@ public class NetworkServer : MonoBehaviour{
     [SerializeField] private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict; //the int key represents NetworkConnection.internalId
     [SerializeField] private ushort clientIDCounter = 0;
 
-    private float m_serverUpdateInterval = 0.1f; //TODO change to 0.033f
+    private float m_serverUpdateInterval = 0.033f; //TODO change to 0.033f
     private bool bRoutinelyUpdateClients = true;
 
     private void Start (){
