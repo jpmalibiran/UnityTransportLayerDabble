@@ -20,17 +20,18 @@ public class NetworkClient : MonoBehaviour{
     public ushort serverPort;
     public bool bVerboseDebug = false;
 
-    private Dictionary<int, Transform> m_clientIDDict;
+    private Dictionary<ushort, Transform> m_clientIDDict;
 
-    private float m_clientUpdateInterval = 1; //TODO change to 0.033f
+    private float m_clientUpdateInterval = 0.1f; //TODO change to 0.033f
     private uint m_pingInterval = 20;
-    [SerializeField] private ushort m_thisClientID = 0;
+    private ushort m_thisClientID = 0;
     private bool bPingServer = true;
+    private bool bUpdateServer = true;
 
     void Start (){
         Debug.Log("[Notice] Connecting to server...");
 
-        m_clientIDDict = new Dictionary<int, Transform>();
+        m_clientIDDict = new Dictionary<ushort, Transform>();
         m_Driver = NetworkDriver.Create();
         m_Connection = default(NetworkConnection);
         var endpoint = NetworkEndPoint.Parse(serverIP,serverPort); // Establish server endpoint
@@ -144,10 +145,12 @@ public class NetworkClient : MonoBehaviour{
                 break;
             case Commands.SERVER_UPDATE:
                 ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
-                Debug.Log("[Notice] Server update message received!");
+                Debug.Log("[Routine] Server update message received!");
+
+
                 break;
             case Commands.PONG:
-                Debug.Log("[Notice] Pong message received!");
+                Debug.Log("[Routine] Pong message received!");
                 break;
             case Commands.SERVER_HANDSHAKE:
                 ServerHandshakeMsg shMsg = JsonUtility.FromJson<ServerHandshakeMsg>(recMsg);
@@ -156,6 +159,7 @@ public class NetworkClient : MonoBehaviour{
                 m_clientIDDict.Add(shMsg.clientID, localClientCharacterRef); //Add local character to player dictionary
                 m_thisClientID = shMsg.clientID; //keep a reference to local player ID
                 SpawnRemotePlayers(shMsg.players); //Spawn remote players
+                StartCoroutine(UploadClientDataRoutine(m_clientUpdateInterval)); //Start routinely updating server with local cube character data
                 break;
             case Commands.NEW_PLAYER:
                 PlayerUpdateMsg puMSg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
@@ -212,6 +216,21 @@ public class NetworkClient : MonoBehaviour{
         Debug.Log("[Notice] Spawned remote player: (" + remotePlayer.clientID + ")");
     }
 
+    private void UpdateRemotePlayers(List<NetworkObjects.NetworkPlayer> remotePlayers) {
+
+        if (bVerboseDebug) {
+            Debug.Log("[Routine] Updating remote players with new data...");
+        }
+
+        foreach (NetworkObjects.NetworkPlayer updateData in remotePlayers) {
+            if (m_clientIDDict.ContainsKey(updateData.clientID)) {
+                m_clientIDDict[updateData.clientID].position = updateData.cubePosition;
+                m_clientIDDict[updateData.clientID].eulerAngles = updateData.cubeOrientation;
+            }
+        }
+
+    }
+
     private void RemoveRemotePlayer(ushort subjectClientID) {
 
         Debug.Log("[Notice] Removing disconnected player from the game...");
@@ -238,9 +257,31 @@ public class NetworkClient : MonoBehaviour{
         }
     }
 
-    //TODO
     private IEnumerator UploadClientDataRoutine(float timeInterval) {
+        PlayerUpdateMsg updateMsg = new PlayerUpdateMsg();
 
-        yield return new WaitForSeconds(timeInterval);
+        if (m_thisClientID != 0) {
+            
+            while (bUpdateServer) {
+                if (bVerboseDebug) {
+                    Debug.Log("[Routine] Updating server with local character data.");
+                }
+
+                //Inserting player data in message
+                updateMsg.player.clientID = m_thisClientID;
+                updateMsg.player.cubePosition = m_clientIDDict[m_thisClientID].position;
+                updateMsg.player.cubeOrientation = m_clientIDDict[m_thisClientID].eulerAngles;
+                updateMsg.player.cubeColor = Color.white;
+                updateMsg.player.bUnassignedData = false;
+
+                //Sending message
+                SendToServer(JsonUtility.ToJson(updateMsg));
+
+                yield return new WaitForSeconds(timeInterval);
+            }
+        }
+        else {
+            Debug.LogError("[Error] local client ID unassigned (0). Aborting operation...");
+        }
     }
 }

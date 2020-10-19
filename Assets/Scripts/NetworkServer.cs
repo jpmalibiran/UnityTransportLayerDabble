@@ -20,6 +20,7 @@ public class NetworkServer : MonoBehaviour{
     [SerializeField] private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict; //the int key represents NetworkConnection.internalId
     [SerializeField] private ushort clientIDCounter = 0;
 
+    private float m_serverUpdateInterval = 0.1f; //TODO change to 0.033f
 
     private void Start (){
         Debug.Log("[Notice] Setting up server...");
@@ -150,14 +151,24 @@ public class NetworkServer : MonoBehaviour{
                 break;
             case Commands.PLAYER_UPDATE:
                 PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-                Debug.Log("[Notice] Player update message received!");
+                Debug.Log("[Routine] Player update message received!");
+
+                //Update player data
+                if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
+                    m_clientIDDict[m_Connections[i].InternalId].cubePosition = puMsg.player.cubePosition;
+                    m_clientIDDict[m_Connections[i].InternalId].cubeOrientation = puMsg.player.cubeOrientation;
+                }
+                else {
+                    Debug.LogError("[Error] Given InternalId is not a key in m_clientIDDict; Cannot update player data.");
+                }
+
                 break;
             case Commands.SERVER_UPDATE: //TODO: remove this. This is not needed because the server isn't going to send a message to itself
                 Debug.LogError("[Error] Server update message received! The server shouldn't receive Commands.SERVER_UPDATE.");
                 break;
             case Commands.PING:
                 if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
-                    Debug.Log("[Notice] Ping received from " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
+                    Debug.Log("[Routine] Ping received from " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
                     PongClientResponse(i); // Send back Pong message
                 }
                 else {
@@ -294,6 +305,20 @@ public class NetworkServer : MonoBehaviour{
             if (client.InternalId != targetClientDictKey) { //Exclude new player
                 SendToClient(JsonUtility.ToJson(newPlayerMsg), client);
             }
+        }
+    }
+
+    private void UpdateClientsWithAllClientData() {
+        ServerUpdateMsg updateMsg = new ServerUpdateMsg();
+
+        //Gather all player data into a network message
+        foreach(KeyValuePair<int, NetworkObjects.NetworkPlayer> client in m_clientIDDict){
+            updateMsg.players.Add(client.Value);
+        }
+
+        //Send data to each connected player
+        foreach (NetworkConnection client in m_Connections) {
+            SendToClient(JsonUtility.ToJson(updateMsg), client);
         }
     }
 
