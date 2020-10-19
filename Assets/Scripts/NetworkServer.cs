@@ -21,6 +21,7 @@ public class NetworkServer : MonoBehaviour{
     [SerializeField] private ushort clientIDCounter = 0;
 
     private float m_serverUpdateInterval = 0.1f; //TODO change to 0.033f
+    private bool bRoutinelyUpdateClients = true;
 
     private void Start (){
         Debug.Log("[Notice] Setting up server...");
@@ -38,6 +39,8 @@ public class NetworkServer : MonoBehaviour{
             Debug.Log("[Notice] Server Ready.");
 
         m_Connections = new NativeList<NetworkConnection>(16, Allocator.Persistent); //Set initial capacity to 16, set memory allocation to persistent (?)
+
+        StartCoroutine(UpdateClientsRoutine(m_serverUpdateInterval));
     }
 
     private void Update (){
@@ -151,7 +154,7 @@ public class NetworkServer : MonoBehaviour{
                 break;
             case Commands.PLAYER_UPDATE:
                 PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-                Debug.Log("[Routine] Player update message received!");
+                //Debug.Log("[Routine] Player update message received!");
 
                 //Update player data
                 if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
@@ -168,7 +171,7 @@ public class NetworkServer : MonoBehaviour{
                 break;
             case Commands.PING:
                 if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
-                    Debug.Log("[Routine] Ping received from " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
+                    //Debug.Log("[Routine] Ping received from " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
                     PongClientResponse(i); // Send back Pong message
                 }
                 else {
@@ -344,6 +347,16 @@ public class NetworkServer : MonoBehaviour{
             else {
                 Debug.LogWarning(" - " + client.InternalId + " (InternalId) [Warning] Missing key in m_clientIDDict.");
             }
+        }
+    }
+
+    private IEnumerator UpdateClientsRoutine(float timeInterval){
+        
+        while (bRoutinelyUpdateClients) {
+            if (m_Connections.Length > 0 && m_clientIDDict.Count > 0) {
+                UpdateClientsWithAllClientData();
+            }
+            yield return new WaitForSeconds(timeInterval);
         }
     }
 

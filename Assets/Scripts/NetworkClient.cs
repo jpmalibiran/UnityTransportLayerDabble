@@ -145,12 +145,13 @@ public class NetworkClient : MonoBehaviour{
                 break;
             case Commands.SERVER_UPDATE:
                 ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
-                Debug.Log("[Routine] Server update message received!");
-
-
+                //Debug.Log("[Routine] Server update message received!");
+                UpdateRemotePlayers(suMsg.players);
                 break;
             case Commands.PONG:
-                Debug.Log("[Routine] Pong message received!");
+                if (bVerboseDebug) {
+                    //Debug.Log("[Routine] Pong message received!");
+                }
                 break;
             case Commands.SERVER_HANDSHAKE:
                 ServerHandshakeMsg shMsg = JsonUtility.FromJson<ServerHandshakeMsg>(recMsg);
@@ -224,8 +225,11 @@ public class NetworkClient : MonoBehaviour{
 
         foreach (NetworkObjects.NetworkPlayer updateData in remotePlayers) {
             if (m_clientIDDict.ContainsKey(updateData.clientID)) {
-                m_clientIDDict[updateData.clientID].position = updateData.cubePosition;
-                m_clientIDDict[updateData.clientID].eulerAngles = updateData.cubeOrientation;
+
+                if (updateData.clientID != m_thisClientID) { //Only update remote characters, not the character the local player controls
+                    m_clientIDDict[updateData.clientID].position = updateData.cubePosition;
+                    m_clientIDDict[updateData.clientID].eulerAngles = updateData.cubeOrientation;
+                }
             }
         }
 
@@ -250,7 +254,7 @@ public class NetworkClient : MonoBehaviour{
 
         while (bPingServer) {
             if (bVerboseDebug) {
-                Debug.Log("[Routine] Pinging server.");
+                //Debug.Log("[Routine] Pinging server.");
             }
             SendToServer(JsonUtility.ToJson(pingMsg));
             yield return new WaitForSeconds(timeInterval);
