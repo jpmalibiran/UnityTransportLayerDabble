@@ -8,13 +8,17 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 
+//Note: The connections server-to-client and client-to-server are NOT the same connection.
+//The internalId represents the connections to an application. A client application may only have one connection- the server and that may be represented by the id 0.
+//Because of this the internalId cannot be used as an identifier of separate clients. Beware when referencing an item with index.
+
 public class NetworkServer : MonoBehaviour{
     public NetworkDriver m_Driver; //Listens; where the network begins and ends
     public ushort serverPort; // server port
     [SerializeField] private NativeList<NetworkConnection> m_Connections; //List of connections. NativeList is an unmanaged memory list data structure (no garbage collection)
 
     [SerializeField] private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict; //the int key represents NetworkConnection.internalId
-    [SerializeField] private ushort clientIDCounter = 1;
+    [SerializeField] private ushort clientIDCounter = 0;
 
 
     private void Start (){
@@ -149,12 +153,11 @@ public class NetworkServer : MonoBehaviour{
                 Debug.Log("[Notice] Player update message received!");
                 break;
             case Commands.SERVER_UPDATE: //TODO: remove this. This is not needed because the server isn't going to send a message to itself
-                ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
                 Debug.LogError("[Error] Server update message received! The server shouldn't receive Commands.SERVER_UPDATE.");
                 break;
             case Commands.PING:
                 if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
-                    Debug.Log("[Notice] Ping received from " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
+                    Debug.Log("[Notice] Ping received from " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
                     PongClientResponse(i); // Send back Pong message
                 }
                 else {
@@ -165,7 +168,7 @@ public class NetworkServer : MonoBehaviour{
                 HandshakeMsg chsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg); 
 
                 if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
-                    Debug.Log("[Notice] Handshake from client received! " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
+                    Debug.Log("[Notice] Handshake from client received! " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
 
                     //Update client player data
                     m_clientIDDict[m_Connections[i].InternalId].cubePosition = chsMsg.player.cubePosition;
@@ -173,8 +176,10 @@ public class NetworkServer : MonoBehaviour{
                     m_clientIDDict[m_Connections[i].InternalId].cubeColor = Color.white;
                     m_clientIDDict[m_Connections[i].InternalId].bUnassignedData = false;
 
+                    Debug.Log("clientID: " + m_clientIDDict[m_Connections[i].InternalId].clientID);
+
                     SendServerHandshake(i, m_clientIDDict[m_Connections[i].InternalId].clientID); //Send back handshake
-                    UpdateClientsWithNewPlayer(m_Connections[i].InternalId); //Send all connected clients the new player data
+                    UpdateClientsWithNewPlayer( i); //Send all connected clients the new player data
                 }
                 else {
                     Debug.LogError("[Error] Handshake received, but given InternalId (" + m_Connections[i].InternalId + ") is not a key in m_clientIDDict. Aborting handshake response...");
@@ -188,14 +193,15 @@ public class NetworkServer : MonoBehaviour{
 
     //Turns the connection at the index into a default connections. Which will be cleaned up in Update()
     private void OnDisconnect(int i){
-        Debug.Log("[Notice] Client disconnected from server. " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
+        Debug.Log("[Notice] Client disconnected from server. " + m_Connections[i].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + " (clientID)");
 
         //Remove entry in Dictionary m_clientIDDict
         if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
+            UpdateClientsWithDisconnectedPlayer(m_clientIDDict[m_Connections[i].InternalId].clientID);
             m_clientIDDict.Remove(m_Connections[i].InternalId);
         }
         else {
-            Debug.LogWarning("[Warning] Given InternalId is not a key in m_clientIDDict.");
+            Debug.LogError("[Error] Given InternalId is not a key in m_clientIDDict.");
         }
 
         //Remove entry in NativeList m_Connections
@@ -210,6 +216,9 @@ public class NetworkServer : MonoBehaviour{
         if (clientIDCounter >= 65530) { //Reset counter near ushort max
             clientIDCounter = 1;
         }
+        if (clientIDCounter == 0) {
+            clientIDCounter = 1;
+        }
 
         return clientIDCounter;
     }
@@ -220,7 +229,7 @@ public class NetworkServer : MonoBehaviour{
         SendToClient(JsonUtility.ToJson(pongMsg), m_Connections[getConnectionIndex]);    
 
         if (m_clientIDDict.ContainsKey(m_Connections[getConnectionIndex].InternalId)) {
-            Debug.Log("[Notice] Pong sent to Client! " + m_Connections[getConnectionIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[getConnectionIndex].InternalId].clientID + "(clientID)");
+            Debug.Log("[Notice] Pong sent to Client! " + m_Connections[getConnectionIndex].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[getConnectionIndex].InternalId].clientID + " (clientID)");
         }
         else {
             Debug.LogWarning("[Warning] Pong sent to Client, but given InternalId is not a key in m_clientIDDict.");
@@ -245,7 +254,7 @@ public class NetworkServer : MonoBehaviour{
         SendToClient(JsonUtility.ToJson(msg), m_Connections[targetClientIndex]);
         
         if (m_clientIDDict.ContainsKey(m_Connections[targetClientIndex].InternalId)) {
-            Debug.Log("[Notice] Handshake sent to Client! " + m_Connections[targetClientIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[targetClientIndex].InternalId].clientID + "(clientID)");
+            Debug.Log("[Notice] Handshake sent to Client! " + m_Connections[targetClientIndex].InternalId + " (InternalId) " + m_clientIDDict[m_Connections[targetClientIndex].InternalId].clientID + " (clientID)");
         }
         else {
             Debug.LogWarning("[Warning] Handshake sent to Client, but given InternalId is not a key in m_clientIDDict.");
@@ -255,8 +264,9 @@ public class NetworkServer : MonoBehaviour{
         ShowClientList();
     }
 
-    private void UpdateClientsWithNewPlayer(int targetClientDictKey) {
+    private void UpdateClientsWithNewPlayer(int newClientIndex) {
         PlayerUpdateMsg newPlayerMsg;
+        int targetClientDictKey = m_Connections[newClientIndex].InternalId;
 
         Debug.Log("[Notice] Sending new player data to all connected clients...");
 
@@ -280,7 +290,23 @@ public class NetworkServer : MonoBehaviour{
         }
 
         foreach (NetworkConnection client in m_Connections) {
-            SendToClient(JsonUtility.ToJson(newPlayerMsg), client);
+
+            if (client.InternalId != targetClientDictKey) { //Exclude new player
+                SendToClient(JsonUtility.ToJson(newPlayerMsg), client);
+            }
+        }
+    }
+
+    private void UpdateClientsWithDisconnectedPlayer(ushort subjectClientID) {
+        PlayerIDMsg disconnectedPlayerMsg;
+
+        Debug.Log("[Notice] Sending disconnected player data to all connected clients...");
+
+        disconnectedPlayerMsg = new PlayerIDMsg(Commands.PLAYER_DISCONNECT);
+        disconnectedPlayerMsg.clientID = subjectClientID;
+
+        foreach (NetworkConnection client in m_Connections) {
+            SendToClient(JsonUtility.ToJson(disconnectedPlayerMsg), client);
         }
     }
 
@@ -288,10 +314,10 @@ public class NetworkServer : MonoBehaviour{
         Debug.Log("[Notice] Connected Clients:");
         foreach (NetworkConnection client in m_Connections) {
             if (m_clientIDDict.ContainsKey(client.InternalId)) {
-                Debug.Log(" - " + client.InternalId + "(InternalId) " + m_clientIDDict[client.InternalId].clientID + "(clientID)");
+                Debug.Log(" - " + client.InternalId + " (InternalId) " + m_clientIDDict[client.InternalId].clientID + " (clientID)");
             }
             else {
-                Debug.LogWarning(" - " + client.InternalId + "(InternalId) [Warning] Missing key in m_clientIDDict.");
+                Debug.LogWarning(" - " + client.InternalId + " (InternalId) [Warning] Missing key in m_clientIDDict.");
             }
         }
     }

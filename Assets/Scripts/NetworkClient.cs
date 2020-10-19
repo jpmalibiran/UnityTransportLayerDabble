@@ -8,10 +8,6 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 
-//Note: The connections server-to-client and client-to-server are NOT the same connection.
-//The internalId represents the connections to an application. A client application may only have one connection- the server and that may be represented by the id 0.
-//Because of this the internalId cannot be used as an identifier of separate clients.
-
 public class NetworkClient : MonoBehaviour{
 
     [SerializeField] private GameObject clientCubePrefab;
@@ -34,6 +30,7 @@ public class NetworkClient : MonoBehaviour{
     void Start (){
         Debug.Log("[Notice] Connecting to server...");
 
+        m_clientIDDict = new Dictionary<int, Transform>();
         m_Driver = NetworkDriver.Create();
         m_Connection = default(NetworkConnection);
         var endpoint = NetworkEndPoint.Parse(serverIP,serverPort); // Establish server endpoint
@@ -143,7 +140,6 @@ public class NetworkClient : MonoBehaviour{
                 Debug.Log("[Notice] Handshake message received!");
                 break;
             case Commands.PLAYER_UPDATE: //shouldnt happen
-                PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
                 Debug.LogError("[Error] Player update message received! Client shouldn't receive messages from clients.");
                 break;
             case Commands.SERVER_UPDATE:
@@ -165,6 +161,11 @@ public class NetworkClient : MonoBehaviour{
                 PlayerUpdateMsg puMSg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
                 Debug.Log("[Notice] A new player has connected. (" + puMSg.player.clientID + ")");
                 SpawnRemotePlayer(puMSg.player);
+                break;
+            case Commands.PLAYER_DISCONNECT:
+                PlayerIDMsg pdMSg = JsonUtility.FromJson<PlayerIDMsg>(recMsg);
+                Debug.Log("[Notice] A player has disconnected. (" + pdMSg.clientID + ")");
+                RemoveRemotePlayer(pdMSg.clientID);
                 break;
             default:
                 Debug.LogError("[Error] Unrecognized message received!");
@@ -193,10 +194,13 @@ public class NetworkClient : MonoBehaviour{
 
         //Spawn remote players
         foreach (NetworkObjects.NetworkPlayer player in remotePlayers) {
-            newObj = Instantiate(clientCubePrefab, player.cubePosition, Quaternion.identity);
-            newObj.transform.eulerAngles = player.cubeOrientation;
-            m_clientIDDict.Add(player.clientID, newObj.transform); //Add to player dictionary
-            Debug.Log(" - Client ID: " + player.clientID + " Spawned.");
+
+            if (!m_clientIDDict.ContainsKey(player.clientID)) { //Don't add players that are already there
+                newObj = Instantiate(clientCubePrefab, player.cubePosition, Quaternion.identity);
+                newObj.transform.eulerAngles = player.cubeOrientation;
+                m_clientIDDict.Add(player.clientID, newObj.transform); //Add to player dictionary
+                Debug.Log(" - Client ID: " + player.clientID + " Spawned.");
+            }
         }
     }
 
@@ -206,6 +210,19 @@ public class NetworkClient : MonoBehaviour{
         newObj.transform.eulerAngles = remotePlayer.cubeOrientation;
         m_clientIDDict.Add(remotePlayer.clientID, newObj.transform); //Add to player dictionary
         Debug.Log("[Notice] Spawned remote player: (" + remotePlayer.clientID + ")");
+    }
+
+    private void RemoveRemotePlayer(ushort subjectClientID) {
+
+        Debug.Log("[Notice] Removing disconnected player from the game...");
+
+        if (m_clientIDDict.ContainsKey(subjectClientID)) {
+            Destroy(m_clientIDDict[subjectClientID].gameObject);
+            m_clientIDDict.Remove(subjectClientID);
+        }
+        else {
+            Debug.LogWarning("[Warning] Given key subjectClientID doesn't exist in m_clientIDDict. Aborting operation...");
+        }
     }
 
     private IEnumerator PingServerRoutine(float timeInterval){

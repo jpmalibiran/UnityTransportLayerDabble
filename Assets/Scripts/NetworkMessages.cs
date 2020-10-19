@@ -8,6 +8,7 @@ namespace NetworkMessages{
     public enum Commands{
         DEFAULT,
         NEW_PLAYER,
+        PLAYER_DISCONNECT,
         PLAYER_UPDATE,
         SERVER_UPDATE,
         HANDSHAKE,
@@ -22,6 +23,16 @@ namespace NetworkMessages{
     [System.Serializable]
     public class NetworkHeader{
         public Commands cmd;
+    }
+
+    [System.Serializable]
+    public class PlayerIDMsg: NetworkHeader{
+        public ushort clientID;
+
+        public PlayerIDMsg(Commands getCommand) {
+            clientID = 0;
+            cmd = getCommand;
+        }
     }
 
     [System.Serializable]
@@ -97,6 +108,7 @@ namespace NetworkObjects{
         public NetworkPlayer(){
             cubeColor = new Color();
             bUnassignedData = true;
+            clientID = 0;
         }
     }
 }
