@@ -11,16 +11,16 @@ using System.Collections.Generic;
 public class NetworkServer : MonoBehaviour{
     public NetworkDriver m_Driver; //Listens; where the network begins and ends
     public ushort serverPort; // server port
-    private NativeList<NetworkConnection> m_Connections; //List of connections. NativeList is an unmanaged memory list data structure (no garbage collection)
+    [SerializeField] private NativeList<NetworkConnection> m_Connections; //List of connections. NativeList is an unmanaged memory list data structure (no garbage collection)
 
-    private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict; //the int key represents NetworkConnection.internalId
-    private ushort clientIDCounter = 1;
+    [SerializeField] private Dictionary<int, NetworkObjects.NetworkPlayer> m_clientIDDict; //the int key represents NetworkConnection.internalId
+    [SerializeField] private ushort clientIDCounter = 1;
 
 
     private void Start (){
         Debug.Log("[Notice] Setting up server...");
-        print("[Notice] Setting up server...");
 
+        m_clientIDDict = new Dictionary<int, NetworkObjects.NetworkPlayer>();
         m_Driver = NetworkDriver.Create();
         var endpoint = NetworkEndPoint.AnyIpv4; //Get this server side IP
         endpoint.Port = serverPort; // Apply server port
@@ -41,46 +41,6 @@ public class NetworkServer : MonoBehaviour{
         CleanUpConnections();
         AcceptNewConnections();
         ReadIncomingMessages();
-
-        // CleanUpConnections
-        //for (int i = 0; i < m_Connections.Length; i++){
-        //    if (!m_Connections[i].IsCreated){ //If there are any default connections: remove it
-        //        //Note: NativeList.RemoveAtSwapBack() removes an item at a specified index.
-        //        //This contrasts from NativeList.RemoveAt() in that NativeList.RemoveAtSwapBack() doesn't make an effort to retain the order of elements. Ergo, it's faster.
-        //        m_Connections.RemoveAtSwapBack(i); //This
-        //        --i;
-        //    }
-        //}
-
-        // AcceptNewConnections
-        //NetworkConnection c = m_Driver.Accept();
-        //while (c != default(NetworkConnection)) { //As long as it's not a default network connection            
-        //    OnConnect(c);
-
-        //    // Check if there is another new connection. If none, c will return a default connection and end the loop
-        //    c = m_Driver.Accept();
-        //}
-
-        // Read Incoming Messages
-        //DataStreamReader stream;
-        //for (int i = 0; i < m_Connections.Length; i++){ //Loop through all active connections
-        //    Assert.IsTrue(m_Connections[i].IsCreated); //Insure that the connection is valid. (ie. not a default connection)
-            
-        //    //Check type of connection and process it accordingly
-        //    NetworkEvent.Type cmd;
-        //    cmd = m_Driver.PopEventForConnection(m_Connections[i], out stream);
-        //    while (cmd != NetworkEvent.Type.Empty){
-        //        if (cmd == NetworkEvent.Type.Data){
-        //            // Fill the DataStreamReader stream with the data and send it to OnData(). i is index of teh connection taking place
-        //            OnData(stream, i); 
-        //        }
-        //        else if (cmd == NetworkEvent.Type.Disconnect){
-        //            OnDisconnect(i); // Disconnect
-        //        }
-
-        //        cmd = m_Driver.PopEventForConnection(m_Connections[i], out stream);
-        //    }
-        //}
     }
 
     //Cleans up driver and the unmanaged connection list. Unity or C# doesn't clean it; gotta be disposed manually 
@@ -93,13 +53,13 @@ public class NetworkServer : MonoBehaviour{
     private void OnConnect(NetworkConnection c){
         NetworkObjects.NetworkPlayer newClient;
 
-        Debug.Log("[Notice] New client connected to server.");
+        Debug.Log("[Notice] New client connected to server. (" + c.InternalId + ")");
 
         m_Connections.Add(c);
         newClient = new NetworkObjects.NetworkPlayer();
 
         newClient.clientID = GetNewClientID(); //Assign new ID
-
+        newClient.bUnassignedData = true;
         m_clientIDDict.Add(c.InternalId, newClient);
 
         //// Example to send a handshake message:
@@ -112,8 +72,8 @@ public class NetworkServer : MonoBehaviour{
         for (int i = 0; i < m_Connections.Length; i++){
             if (!m_Connections[i].IsCreated){ //If there are any default connections: remove it
                 //Note: NativeList.RemoveAtSwapBack() removes an item at a specified index.
-                //This contrasts from NativeList.RemoveAt() in that NativeList.RemoveAtSwapBack() doesn't make an effort to retain the order of elements. Ergo, it's faster.
-                m_Connections.RemoveAtSwapBack(i); //This
+                //This contrasts from NativeList.RemoveAt() in that NativeList.RemoveAtSwapBack() doesn't retain the order of elements. Ergo, it's faster.
+                m_Connections.RemoveAtSwapBack(i); 
                 --i;
             }
         }
@@ -193,13 +153,32 @@ public class NetworkServer : MonoBehaviour{
                 Debug.LogError("[Error] Server update message received! The server shouldn't receive Commands.SERVER_UPDATE.");
                 break;
             case Commands.PING:
-                Debug.Log("[Notice] Ping received from " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
-                PongClientResponse(i); // Send back Pong message
+                if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
+                    Debug.Log("[Notice] Ping received from " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
+                    PongClientResponse(i); // Send back Pong message
+                }
+                else {
+                    Debug.LogError("[Error] Ping received, but given InternalId (" + m_Connections[i].InternalId + ") is not a key in m_clientIDDict. Aborting Pong response...");
+                }
                 break;
             case Commands.CLIENT_HANDSHAKE:
-                Debug.Log("[Notice] Handshake from client received! " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
-                SendServerHandshake(i, m_clientIDDict[m_Connections[i].InternalId].clientID); //Send back handshake
-                UpdateClientsWithNewPlayer(m_clientIDDict[m_Connections[i].InternalId].clientID); //Send all connected clients the new player data
+                HandshakeMsg chsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg); 
+
+                if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
+                    Debug.Log("[Notice] Handshake from client received! " + m_Connections[i].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[i].InternalId].clientID + "(clientID)");
+
+                    //Update client player data
+                    m_clientIDDict[m_Connections[i].InternalId].cubePosition = chsMsg.player.cubePosition;
+                    m_clientIDDict[m_Connections[i].InternalId].cubeOrientation = chsMsg.player.cubeOrientation;
+                    m_clientIDDict[m_Connections[i].InternalId].cubeColor = Color.white;
+                    m_clientIDDict[m_Connections[i].InternalId].bUnassignedData = false;
+
+                    SendServerHandshake(i, m_clientIDDict[m_Connections[i].InternalId].clientID); //Send back handshake
+                    UpdateClientsWithNewPlayer(m_Connections[i].InternalId); //Send all connected clients the new player data
+                }
+                else {
+                    Debug.LogError("[Error] Handshake received, but given InternalId (" + m_Connections[i].InternalId + ") is not a key in m_clientIDDict. Aborting handshake response...");
+                }
                 break;
             default:
                 Debug.LogError("[Error] SERVER ERROR: Unrecognized message received!");
@@ -214,6 +193,9 @@ public class NetworkServer : MonoBehaviour{
         //Remove entry in Dictionary m_clientIDDict
         if (m_clientIDDict.ContainsKey(m_Connections[i].InternalId)) {
             m_clientIDDict.Remove(m_Connections[i].InternalId);
+        }
+        else {
+            Debug.LogWarning("[Warning] Given InternalId is not a key in m_clientIDDict.");
         }
 
         //Remove entry in NativeList m_Connections
@@ -236,7 +218,14 @@ public class NetworkServer : MonoBehaviour{
         NetworkHeader pongMsg = new NetworkHeader(); 
         pongMsg.cmd = Commands.PONG;
         SendToClient(JsonUtility.ToJson(pongMsg), m_Connections[getConnectionIndex]);    
-        Debug.Log("[Notice] Pong sent to Client! " + m_Connections[getConnectionIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[getConnectionIndex].InternalId].clientID + "(clientID)");
+
+        if (m_clientIDDict.ContainsKey(m_Connections[getConnectionIndex].InternalId)) {
+            Debug.Log("[Notice] Pong sent to Client! " + m_Connections[getConnectionIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[getConnectionIndex].InternalId].clientID + "(clientID)");
+        }
+        else {
+            Debug.LogWarning("[Warning] Pong sent to Client, but given InternalId is not a key in m_clientIDDict.");
+        }
+        
     }
 
     private void SendServerHandshake(int targetClientIndex, ushort setClientID) {
@@ -254,23 +243,41 @@ public class NetworkServer : MonoBehaviour{
 
         //Send handshake to client
         SendToClient(JsonUtility.ToJson(msg), m_Connections[targetClientIndex]);
-        Debug.Log("[Notice] Handshake sent to Client! " + m_Connections[targetClientIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[targetClientIndex].InternalId].clientID + "(clientID)");
+        
+        if (m_clientIDDict.ContainsKey(m_Connections[targetClientIndex].InternalId)) {
+            Debug.Log("[Notice] Handshake sent to Client! " + m_Connections[targetClientIndex].InternalId + "(InternalId) " + m_clientIDDict[m_Connections[targetClientIndex].InternalId].clientID + "(clientID)");
+        }
+        else {
+            Debug.LogWarning("[Warning] Handshake sent to Client, but given InternalId is not a key in m_clientIDDict.");
+        }
+
 
         ShowClientList();
     }
 
-    private void UpdateClientsWithNewPlayer(ushort getClientID) {
+    private void UpdateClientsWithNewPlayer(int targetClientDictKey) {
         PlayerUpdateMsg newPlayerMsg;
 
         Debug.Log("[Notice] Sending new player data to all connected clients...");
 
         newPlayerMsg = new PlayerUpdateMsg(Commands.NEW_PLAYER);
 
-        newPlayerMsg.player.clientID = getClientID;
-        newPlayerMsg.player.cubePosition = m_clientIDDict[getClientID].cubePosition;
-        newPlayerMsg.player.cubeOrientation = m_clientIDDict[getClientID].cubeOrientation;
-        newPlayerMsg.player.cubeColor = Color.white;
-        newPlayerMsg.player.bUnassignedData = false;
+        if (m_clientIDDict.ContainsKey(targetClientDictKey)) {
+            if (!m_clientIDDict[targetClientDictKey].bUnassignedData) {
+                newPlayerMsg.player.clientID = m_clientIDDict[targetClientDictKey].clientID;
+                newPlayerMsg.player.cubePosition = m_clientIDDict[targetClientDictKey].cubePosition;
+                newPlayerMsg.player.cubeOrientation = m_clientIDDict[targetClientDictKey].cubeOrientation;
+                newPlayerMsg.player.cubeColor = Color.white;
+                newPlayerMsg.player.bUnassignedData = false;
+            }
+            else {
+                Debug.LogError("[Error] New player data unassigned and therefore cannot be sent out to connected clients. Aborting operration...");
+            }
+        }
+        else {
+            newPlayerMsg.player.bUnassignedData = true;
+            Debug.LogError("[Error] The given client key does not exist in m_clientIDDict.");
+        }
 
         foreach (NetworkConnection client in m_Connections) {
             SendToClient(JsonUtility.ToJson(newPlayerMsg), client);
@@ -280,7 +287,12 @@ public class NetworkServer : MonoBehaviour{
     private void ShowClientList() {
         Debug.Log("[Notice] Connected Clients:");
         foreach (NetworkConnection client in m_Connections) {
-            Debug.Log(" - " + client.InternalId + "(InternalId) " + m_clientIDDict[client.InternalId].clientID + "(clientID)");
+            if (m_clientIDDict.ContainsKey(client.InternalId)) {
+                Debug.Log(" - " + client.InternalId + "(InternalId) " + m_clientIDDict[client.InternalId].clientID + "(clientID)");
+            }
+            else {
+                Debug.LogWarning(" - " + client.InternalId + "(InternalId) [Warning] Missing key in m_clientIDDict.");
+            }
         }
     }
 

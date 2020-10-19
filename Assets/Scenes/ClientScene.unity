@@ -485,6 +485,7 @@ MonoBehaviour:
   serverIP: 170.52.84.16
   serverPort: 12345
   bVerboseDebug: 0
+  m_thisClientID: 0
 --- !u!1 &1141401725
 GameObject:
   m_ObjectHideFlags: 0
@@ -639,7 +640,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 8f3dbed76b309954883235cfa1cbc804, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

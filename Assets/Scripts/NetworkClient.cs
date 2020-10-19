@@ -28,7 +28,7 @@ public class NetworkClient : MonoBehaviour{
 
     private float m_clientUpdateInterval = 1; //TODO change to 0.033f
     private uint m_pingInterval = 20;
-    private ushort m_thisClientID = 0;
+    [SerializeField] private ushort m_thisClientID = 0;
     private bool bPingServer = true;
 
     void Start (){
