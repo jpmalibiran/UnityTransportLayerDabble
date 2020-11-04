@@ -482,10 +482,9 @@ MonoBehaviour:
     type: 3}
   localClientCharacterRef: {fileID: 0}
   spawnLocation: {fileID: 505723852}
-  serverIP: 170.52.84.16
+  serverIP: 3.139.71.185
   serverPort: 12345
   bVerboseDebug: 0
-  m_thisClientID: 0
 --- !u!1 &1141401725
 GameObject:
   m_ObjectHideFlags: 0

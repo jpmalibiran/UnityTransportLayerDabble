@@ -22,7 +22,7 @@ public class NetworkClient : MonoBehaviour{
 
     private Dictionary<ushort, Transform> m_clientIDDict;
 
-    private float m_clientUpdateInterval = 0.033f; //TODO change to 0.033f
+    private float m_clientUpdateInterval = 0.033f; 
     private uint m_pingInterval = 20; //Pings the server every 20 seconds
     private ushort m_thisClientID = 0;
     private bool bPingServer = true;
